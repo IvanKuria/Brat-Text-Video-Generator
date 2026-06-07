@@ -7,6 +7,8 @@ import TranscriptEditor from "@/components/TranscriptEditor";
 import LayoutControls from "@/components/LayoutControls";
 import ExportBar from "@/components/ExportBar";
 import PreviewCanvas from "@/components/PreviewCanvas";
+import MediaPanel from "@/components/MediaPanel";
+import Timeline from "@/components/Timeline";
 
 function Section({
   n,
@@ -90,7 +92,10 @@ export default function Home() {
         <Section n="3" title="format">
           <LayoutControls />
         </Section>
-        <Section n="4" title="export">
+        <Section n="4" title="media">
+          <MediaPanel />
+        </Section>
+        <Section n="5" title="export">
           <ExportBar />
         </Section>
       </div>
@@ -103,6 +108,7 @@ export default function Home() {
         >
           {playing ? "⏸ pause" : "▶ play"}
         </button>
+        <Timeline />
       </div>
       <audio ref={audioRef} hidden />
     </main>
