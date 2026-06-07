@@ -1,19 +1,30 @@
 {
-  "name": "reader",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "name": "bratapp",
+  "version": "0.1.0",
+  "private": true,
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
-    "@remotion/install-whisper-cpp": "^4.0.473"
+    "@huggingface/transformers": "^4.2.0",
+    "mp4-muxer": "^5.2.2",
+    "next": "16.2.7",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
-    "puppeteer-core": "^25.1.0"
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.7",
+    "puppeteer-core": "^25.1.0",
+    "tailwindcss": "^4",
+    "typescript": "^5"
   }
 }

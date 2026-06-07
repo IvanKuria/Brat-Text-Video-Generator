@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+/* brat type: Arial Narrow Regular for display/video, Bold for UI chrome.
+   Stable family names so the canvas renderer can reference them directly. */
+@font-face {
+  font-family: "ArialNarrow";
+  src: url("/fonts/ArialNarrowRegular.ttf") format("truetype");
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: "ArialNarrowB";
+  src: url("/fonts/ArialNarrowBold.ttf") format("truetype");
+  font-weight: 700;
+  font-display: swap;
+}
+
+:root {
+  --bg: #ffffff;
+  --ink: #000000;
+  --line: #e6e6e6;
+  --muted: #8a8a8a;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-ink: var(--ink);
+  --color-line: var(--line);
+  --color-muted: var(--muted);
+  --font-narrow: "ArialNarrow", Arial, sans-serif;
+  --font-ui: "ArialNarrowB", Arial, sans-serif;
+}
+
+html,
+body {
+  height: 100%;
+}
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "ArialNarrowB", Arial, sans-serif;
+}

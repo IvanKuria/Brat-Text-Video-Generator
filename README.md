@@ -1,76 +1,36 @@
-# Brat Text Video Generator
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-Turn an audio file into a **brat**-style (Charli XCX) karaoke video — black text on white,
-Arial Narrow, lowercase, justified edge-to-edge, softly blurred — synced word-by-word to the
-narration. Switch between **9:16** (TikTok/Shorts) and **16:9** (YouTube).
+## Getting Started
 
-There are two ways to run it:
+First, run the development server:
 
-## 1. Browser version (hosted, zero install)
-
-`index.html` is a fully client-side app — transcription, rendering, and video export all run
-**in your browser**, so it works on any static host (GitHub Pages, Vercel, etc.) with no server.
-
-- **Audio**: a file picker — your file never leaves your device.
-- **Transcription**: Whisper compiled to WebAssembly via [`transformers.js`](https://github.com/huggingface/transformers.js)
-  (`tiny.en` / `base.en` / `small.en`), running on WebGPU when available. The model downloads
-  once on first use.
-- **Edit**: the full transcript is shown in an editable box — fix any misheard words and hit
-  *apply*. Edits are diffed against the original so unchanged words keep their exact timestamps
-  (inserted words are interpolated), so the video stays in sync.
-- **Render**: the brat karaoke is drawn on a `<canvas>` (chunked to ≤3 words/line, ≤4 lines/frame,
-  justified, auto-fit, light blur), revealing each word as it's spoken.
-- **Export**: real-time `MediaRecorder` capture of canvas + audio → MP4 (falls back to WebM on
-  browsers that can't record MP4).
-
-Just open the hosted page (or `index.html` over any static server) and follow steps 1–4.
-
-> Browser caveats: export records in real time (a 2-min clip takes ~2 min), keep the tab focused,
-> and use Chrome/Edge for WebGPU + MP4 recording. For long videos or best transcription accuracy,
-> use the local version below.
-
-## 2. Local version (Node — fastest, best quality)
-
-Uses native **whisper.cpp** (`medium.en`), headless **Chrome**, and native **ffmpeg** for a
-frame-accurate render. This does **not** run on serverless hosts (it spawns native binaries) — it's
-a desktop tool.
-
-### Requirements
-- Node.js 18+, **ffmpeg**/**ffprobe** on PATH
-- Chrome/Chromium — set its path with `CHROME=...` (or `npx @puppeteer/browsers install chrome`)
-
-### Web UI
 ```bash
-npm install
-node server.mjs        # → http://localhost:4180
-```
-Pick audio → transcribe → choose 9:16/16:9 → preview (space to play) → generate mp4 → download.
-
-### CLI
-```bash
-# put your audio at ./narration.m4a, then:
-node transcribe.mjs                       # -> captions.json
-node build-standalone.mjs                 # -> reader.html (captions inlined, offline)
-node record.mjs --aspect 9x16 --out out.mp4
-node record.mjs --aspect 16x9 --sec 20    # 20s test in 16:9
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
 ```
 
-## Files
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-| File | Role |
-|------|------|
-| `index.html` | **Browser app** (transformers.js + canvas + MediaRecorder) |
-| `vercel.json` | Static-deploy config |
-| `local-reader.html` | Local tool's brat render surface (DOM; recorded by Puppeteer) |
-| `server.mjs` | Local web server (zero deps) |
-| `app.html` | Local web UI |
-| `record.mjs` | Headless frame capture → ffmpeg MP4 |
-| `transcribe.mjs` | Audio → `captions.json` (whisper.cpp) |
-| `build-standalone.mjs` | Generates the offline `reader.html` |
-| `shoot.mjs` | Screenshot the reader (verification) |
-| `thumbnail.html` | Brat-style thumbnail template |
-| `fonts/` | Arial Narrow (Regular = video, Bold = UI) |
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-The video font is **Arial Narrow Regular**, lowercase, with a light `blur(2px)`.
-`narration.m4a`, `captions.json`, `reader.html`, `out.mp4`, `whisper.cpp/`, and `node_modules/`
-are gitignored — they're your content or regenerated artifacts.
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+
+## Learn More
+
+To learn more about Next.js, take a look at the following resources:
+
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## Deploy on Vercel
+
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
