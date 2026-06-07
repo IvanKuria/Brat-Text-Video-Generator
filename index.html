@@ -3,113 +3,123 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>brat — transcript</title>
+<title>brat video generator</title>
 <style>
-  @font-face{
-    font-family:"ArialNarrow";
-    src:url("./fonts/ArialNarrowRegular.ttf") format("truetype");
-    font-weight:400; font-style:normal; font-display:block;
-  }
-  :root{
-    --bg:#ffffff;          /* brat white */
-    --ink:#000000;         /* spoken */
-    --ghost:#bdbdbd;       /* unspoken */
-  }
-  html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
-  /* #stage dimensions are set from the ?aspect= dims map in JS (default 9x16). */
-  #stage{position:absolute;top:50%;left:50%;width:1080px;height:1920px;transform:translate(-50%,-50%);}
-  #page{
-    position:absolute; left:60px; right:60px; top:50%; transform:translateY(-50%) scaleX(1.08);
-    font-family:"ArialNarrow",Arial,sans-serif; font-weight:400;
-    text-transform:lowercase;
-    font-size:132px; line-height:1.04; letter-spacing:0;
-    color:var(--ghost);
-    filter:blur(2px);
-    transition:opacity .28s ease, transform .28s ease;
-  }
-  #page.swap{opacity:0; transform:translateY(-50%) scaleX(1.08) translateY(14px);}
-  /* each line is a flex row spread edge-to-edge (brat justified look) */
-  .line{display:flex; justify-content:space-between; align-items:baseline; white-space:nowrap;}
-  .line.one{justify-content:center;}
-  .w{color:var(--ghost); transition:color .18s ease;}
-  .w.on{color:var(--ink);}
-  .capture #page, .capture .w{transition:none !important;}
-  .capture #hint{display:none !important;}
-  #hint{
-    position:absolute; bottom:54px; left:50%; transform:translateX(-50%);
-    font-family:"ArialNarrow",Arial,sans-serif; font-weight:400; text-transform:lowercase;
-    font-size:30px; color:#bdbdbd;
-  }
+  @font-face{ font-family:"ArialNarrow"; src:url("./fonts/ArialNarrowRegular.ttf") format("truetype"); font-weight:400; font-display:block; }
+  @font-face{ font-family:"ArialNarrowUI"; src:url("./fonts/ArialNarrowBold.ttf") format("truetype"); font-weight:700; font-display:swap; }
+  :root{ --ink:#000; --line:#e6e6e6; --muted:#8a8a8a; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:#fff; color:var(--ink); font-family:"ArialNarrowUI",Arial,sans-serif;
+        display:grid; grid-template-columns:420px 1fr; min-height:100vh; }
+  .left{ padding:30px 30px 40px; border-right:1px solid var(--line); overflow:auto; }
+  h1{ font-size:46px; text-transform:lowercase; margin:0; letter-spacing:-1px; line-height:.95; }
+  .sub{ color:var(--muted); margin:6px 0 24px; font-size:16px; }
+  .step{ margin:0 0 22px; }
+  .step h2{ font-size:19px; text-transform:lowercase; margin:0 0 9px; }
+  .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  label.r{ display:inline-flex; align-items:center; gap:6px; margin-right:14px; font-size:18px; cursor:pointer; }
+  input[type=file]{ font-size:14px; max-width:100%; }
+  select{ font-family:inherit; font-size:16px; padding:4px; }
+  button{ font-family:inherit; font-size:18px; text-transform:lowercase; background:#000; color:#fff; border:0; padding:9px 16px; cursor:pointer; }
+  button:disabled{ background:#c4c4c4; cursor:default; }
+  button.ghost{ background:#fff; color:#000; border:2px solid #000; }
+  progress{ width:100%; height:10px; margin-top:8px; }
+  #status{ font-size:13px; color:var(--muted); margin-top:8px; white-space:pre-wrap; font-family:ui-monospace,Menlo,monospace; }
+  #dl{ display:none; margin-top:10px; font-size:20px; }
+  .hint{ color:var(--muted); font-size:13px; margin-top:6px; }
+  .right{ display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px; gap:14px; background:#fafafa; }
+  #wrap{ position:relative; box-shadow:0 1px 0 var(--line); background:#fff; }
+  canvas{ display:block; background:#fff; }
+  .controls{ display:flex; gap:10px; align-items:center; }
+  .badge{ font-family:ui-monospace,Menlo,monospace; font-size:12px; color:var(--muted); }
 </style>
 </head>
 <body>
-<div id="stage">
-  <div id="page"></div>
-  <div id="hint">press space to play</div>
-</div>
-<audio id="audio" src="./narration.m4a" preload="auto"></audio>
+  <div class="left">
+    <h1>brat video<br>generator</h1>
+    <p class="sub">audio → brat-style karaoke video. runs entirely in your browser.</p>
 
-<script>
-const audio = document.getElementById("audio");
-const pageEl = document.getElementById("page");
-const hint = document.getElementById("hint");
-const stage = document.getElementById("stage");
+    <div class="step">
+      <h2>1 · audio</h2>
+      <input id="file" type="file" accept="audio/*,video/*" />
+      <p class="hint">your file never leaves your device.</p>
+    </div>
 
-// ---- aspect / canvas config ----
-const SCALEX = 1.08; // horizontal stretch baked into #page (must match CSS transform)
-const MINGAP_FRAC = 0.10; // minimum inter-word gap as a fraction of font-size (for fit check)
-const MAX_WORDS_PER_LINE = 3;
-const MAX_LINES_PER_FRAME = 4;
+    <div class="step">
+      <h2>2 · transcribe</h2>
+      <div class="row">
+        <select id="model">
+          <option value="Xenova/whisper-tiny.en">tiny.en — fastest</option>
+          <option value="Xenova/whisper-base.en" selected>base.en — balanced</option>
+          <option value="Xenova/whisper-small.en">small.en — best (slow)</option>
+        </select>
+        <button id="btnTranscribe" disabled>transcribe</button>
+      </div>
+      <progress id="prog" value="0" max="1" style="display:none"></progress>
+      <div id="status"></div>
+    </div>
+
+    <div class="step">
+      <h2>3 · format</h2>
+      <div class="row">
+        <label class="r"><input type="radio" name="aspect" value="9x16" checked /> 9:16</label>
+        <label class="r"><input type="radio" name="aspect" value="16x9" /> 16:9</label>
+      </div>
+    </div>
+
+    <div class="step">
+      <h2>4 · export</h2>
+      <div class="row">
+        <button id="btnExport" disabled>export video</button>
+      </div>
+      <p class="hint">records in real time — keep this tab focused.</p>
+      <a id="dl" href="#" download>⬇ download</a>
+    </div>
+  </div>
+
+  <div class="right">
+    <div id="wrap"><canvas id="cv" width="1080" height="1920"></canvas></div>
+    <div class="controls">
+      <button id="btnPlay" class="ghost" disabled>▶ play</button>
+      <span class="badge" id="badge">no captions yet</span>
+    </div>
+  </div>
+
+<audio id="audio"></audio>
+
+<script type="module">
+import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3";
+// allow remote model downloads from the HF hub (this is a static site, no local models)
+env.allowLocalModels = false;
+
+// ---------- brat layout config ----------
+const SCALEX = 1.08, BLUR = 2, MINGAP_FRAC = 0.10;
+const MAX_WORDS_PER_LINE = 3, MAX_LINES_PER_FRAME = 4;
 const DIMS = {
-  "9x16": { w: 1080, h: 1920, font: 132, pad: 60 },
-  "16x9": { w: 1920, h: 1080, font: 150, pad: 120 },
+  "9x16": { w:1080, h:1920, font:132, pad:60 },
+  "16x9": { w:1920, h:1080, font:150, pad:120 },
 };
-function readAspect(){
-  let a = new URLSearchParams(location.search).get("aspect") || "9x16";
-  a = a.replace(":", "x").trim();
-  return DIMS[a] ? a : "9x16";
-}
-const ASPECT = readAspect();
-const D = DIMS[ASPECT];
-// apply canvas dimensions
-stage.style.width = D.w + "px";
-stage.style.height = D.h + "px";
-pageEl.style.left = D.pad + "px";
-pageEl.style.right = D.pad + "px";
-pageEl.style.fontSize = D.font + "px";
 
-let words = [];      // {text, startMs, endMs}
-let pages = [];      // each frame = array of lines; each line = array of word indices
-let wordPage = [];   // word index -> frame index
-let activePage = -1;
-let spans = [];      // current frame's word spans (in reading order)
+// ---------- state ----------
+let words = [];        // {text, startMs, endMs}
+let pages = [];        // frames -> lines -> word indices
+let wordPage = [];
 let playing = false;
-let pausedMs = 0;    // clock when not playing (decouples preview from audio seeking)
 
-// ?capture=1 → deterministic offline frame rendering (no transitions, instant page swaps).
-const captureMode = new URLSearchParams(location.search).has("capture");
-if(captureMode){ document.documentElement.classList.add("capture"); if(document.body) document.body.classList.add("capture"); }
+const $ = (id) => document.getElementById(id);
+const audio = $("audio");
+const cv = $("cv");
+const ctx = cv.getContext("2d");
+const status = $("status");
 
-function timeMsNow(){ return playing ? audio.currentTime*1000 : pausedMs; }
+function aspect(){ return document.querySelector('input[name=aspect]:checked').value; }
+function D(){ return DIMS[aspect()]; }
 
-function fit(){ const s=Math.min(innerWidth/D.w, innerHeight/D.h); stage.style.transform=`translate(-50%,-50%) scale(${s})`; }
-addEventListener("resize", fit); fit();
+function setStatus(t){ status.textContent = t; }
 
-function mergeWords(tokens){
-  const out=[];
-  for(const t of tokens){
-    if(out.length===0 || /^\s/.test(t.text)){ out.push({text:t.text, startMs:t.startMs, endMs:t.endMs}); }
-    else { const w=out[out.length-1]; w.text+=t.text; w.endMs=t.endMs; }
-  }
-  return out;
-}
-
-// Chunk words into frames of lines: <=3 words/line, <=4 lines/frame (12 words max).
-// Prefer ending a frame at sentence punctuation once it already has >=2 lines, so
-// frames don't straddle long pauses awkwardly — but never exceed the hard caps.
+// ---------- chunking (same rules as the local tool) ----------
 function buildPages(){
-  pages=[];
-  let frameLines=[], curLine=[];
+  pages=[]; let frameLines=[], curLine=[];
   const flushLine=()=>{ if(curLine.length){ frameLines.push(curLine); curLine=[]; } };
   const flushFrame=()=>{ flushLine(); if(frameLines.length){ pages.push(frameLines); frameLines=[]; } };
   for(let i=0;i<words.length;i++){
@@ -117,58 +127,11 @@ function buildPages(){
     const ends=/[.?!]["”']?$/.test(words[i].text.trim());
     if(curLine.length>=MAX_WORDS_PER_LINE) flushLine();
     if(frameLines.length>=MAX_LINES_PER_FRAME) flushFrame();
-    else if(ends && (frameLines.length>=2 || (frameLines.length>=1 && curLine.length===0))) flushFrame();
+    else if(ends && frameLines.length>=2) flushFrame();
   }
   flushFrame();
   wordPage=new Array(words.length);
   pages.forEach((fr,pi)=>fr.forEach(line=>line.forEach(wi=>wordPage[wi]=pi)));
-}
-
-// Shrink the current frame's font so the widest line fits the available width.
-// (Mirrors how bratgenerator scales text to fill/fit. scaleX is accounted for.)
-function fitFrame(){
-  pageEl.style.fontSize = D.font + "px";
-  const avail = pageEl.clientWidth / SCALEX;
-  let scale = 1;
-  for(const line of pageEl.querySelectorAll(".line")){
-    const kids = line.children;
-    if(!kids.length) continue;
-    let sum=0; for(const s of kids) sum+=s.offsetWidth;
-    const need = sum + (kids.length-1)*D.font*MINGAP_FRAC;
-    if(need>avail) scale=Math.min(scale, avail/need);
-  }
-  if(scale<1) pageEl.style.fontSize = (D.font*scale) + "px";
-}
-
-function buildFrag(pi){
-  spans=[];
-  const frag=document.createDocumentFragment();
-  for(const line of pages[pi]){
-    const ld=document.createElement("div");
-    ld.className = "line" + (line.length===1 ? " one" : "");
-    for(const wi of line){
-      const s=document.createElement("span");
-      s.className="w"; s.textContent=words[wi].text.trim();
-      s.dataset.wi=wi;
-      ld.appendChild(s); spans.push(s);
-    }
-    frag.appendChild(ld);
-  }
-  return frag;
-}
-
-function renderPage(pi){
-  const frag=buildFrag(pi);
-  if(captureMode){
-    // instant, synchronous swap for frame-accurate capture
-    pageEl.innerHTML=""; pageEl.appendChild(frag); fitFrame();
-  } else {
-    // swap animation
-    pageEl.classList.add("swap");
-    setTimeout(()=>{
-      pageEl.innerHTML=""; pageEl.appendChild(frag); fitFrame(); pageEl.classList.remove("swap");
-    }, 140);
-  }
 }
 
 function currentWordIndex(tMs){
@@ -177,48 +140,218 @@ function currentWordIndex(tMs){
   return idx;
 }
 
-function frame(){
-  if(words.length){
-    const tMs=timeMsNow();
-    const cwi=currentWordIndex(tMs);
-    const pi = cwi<0 ? 0 : wordPage[cwi];
-    if(pi!==activePage){ activePage=pi; renderPage(pi); }
-    // update colors (after potential swap settle, spans reflect activePage)
-    for(const s of spans){ const wi=+s.dataset.wi; s.classList.toggle("on", words[wi].startMs<=tMs); }
+// ---------- canvas rendering ----------
+// canvas fillText has no CSS text-transform, so lowercase here for the brat look
+const wtext = (wi) => words[wi].text.trim().toLowerCase();
+function measureLine(line, fontPx){
+  ctx.font = `${fontPx}px ArialNarrow, Arial, sans-serif`;
+  const widths = line.map(wi => ctx.measureText(wtext(wi)).width);
+  return { widths, sum: widths.reduce((a,b)=>a+b,0) };
+}
+function frameFontPx(pi, d){
+  const base = d.font, layoutW = (d.w - 2*d.pad)/SCALEX;
+  let scale = 1;
+  for(const line of pages[pi]){
+    const { sum } = measureLine(line, base);
+    const need = sum + (line.length-1)*base*MINGAP_FRAC;
+    if(need > layoutW) scale = Math.min(scale, layoutW/need);
   }
-  requestAnimationFrame(frame);
+  return base*scale;
+}
+function drawFrame(pi, curMs){
+  const d = D();
+  if(cv.width!==d.w || cv.height!==d.h){ cv.width=d.w; cv.height=d.h; fitCanvas(); }
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.fillStyle="#fff"; ctx.fillRect(0,0,d.w,d.h);
+  if(pi<0 || !pages[pi]) return;
+  const fontPx = frameFontPx(pi, d);
+  const layoutW = (d.w - 2*d.pad)/SCALEX;
+  const x0 = (d.w - layoutW)/2;
+  const lineH = fontPx*1.04;
+  const totalH = pages[pi].length*lineH;
+  let y = d.h/2 - totalH/2 + fontPx*0.80;
+  // horizontal brat stretch about canvas center
+  ctx.setTransform(SCALEX,0,0,1, d.w/2*(1-SCALEX), 0);
+  ctx.textBaseline="alphabetic";
+  ctx.font = `${fontPx}px ArialNarrow, Arial, sans-serif`;
+  ctx.filter = `blur(${BLUR}px)`;
+  for(const line of pages[pi]){
+    const { widths, sum } = measureLine(line, fontPx);
+    const n = line.length;
+    let pos=[];
+    if(n===1){ pos=[x0 + (layoutW - widths[0])/2]; }
+    else { const gap=(layoutW - sum)/(n-1); let x=x0; for(let i=0;i<n;i++){ pos.push(x); x+=widths[i]+gap; } }
+    for(let i=0;i<n;i++){
+      const wi=line[i];
+      ctx.fillStyle = words[wi].startMs<=curMs ? "#000" : "#bdbdbd";
+      ctx.fillText(wtext(wi), pos[i], y);
+    }
+    y += lineH;
+  }
+  ctx.filter="none";
 }
 
-function play(){ audio.currentTime=pausedMs/1000; audio.play(); playing=true; hint.style.display="none"; }
-function pause(){ pausedMs=audio.currentTime*1000; audio.pause(); playing=false; hint.style.display=""; }
-function seekToPage(pi){ pi=Math.max(0,Math.min(pages.length-1,pi)); pausedMs=words[pages[pi][0][0]].startMs; if(playing) audio.currentTime=pausedMs/1000; }
-
-addEventListener("keydown",(e)=>{
-  if(e.key===" "){ e.preventDefault(); playing?pause():play(); }
-  else if(e.key==="ArrowRight"){ if(playing)pause(); seekToPage((activePage<0?0:activePage)+1); }
-  else if(e.key==="ArrowLeft"){ if(playing)pause(); seekToPage((activePage<0?0:activePage)-1); }
-  else if(e.key.toLowerCase()==="r"){ pause(); pausedMs=0; audio.currentTime=0; }
-});
-
-function start(data){
-  words=mergeWords(data); buildPages();
-  // capture API: list of visual-change times (ms) + a synchronous seek used by record.mjs
-  window.__frames = [0, ...words.map(w=>w.startMs)];
-  window.__seek = (ms)=>{
-    pausedMs = ms;
-    const cwi = currentWordIndex(ms);
-    const pi = cwi<0 ? 0 : wordPage[cwi];
-    if(pi!==activePage || !spans.length){ activePage=pi; renderPage(pi); }
-    for(const s of spans){ const wi=+s.dataset.wi; s.classList.toggle("on", words[wi].startMs<=ms); }
-  };
-  // deep-link ?t=seconds (for previews/screenshots) drives the clock directly
-  const t=parseFloat(new URLSearchParams(location.search).get("t"));
-  if(!isNaN(t)){ pausedMs=t*1000; const sync=()=>{audio.currentTime=t;}; if(audio.readyState>=1) sync(); else audio.addEventListener("loadedmetadata", sync, {once:true}); }
-  requestAnimationFrame(frame);
+function fitCanvas(){
+  const d = D();
+  const maxW = Math.min(window.innerWidth - 480, 620);
+  const maxH = window.innerHeight - 150;
+  const s = Math.min(maxW/d.w, maxH/d.h);
+  cv.style.width = (d.w*s)+"px";
+  cv.style.height = (d.h*s)+"px";
 }
-// Use inlined captions if present (standalone build), else fetch the file (dev/server).
-if(window.CAPTIONS){ start(window.CAPTIONS); }
-else { fetch("./captions.json").then(r=>r.json()).then(start).catch(()=>{ pageEl.style.color="#1a1712"; pageEl.textContent="captions.json not found — run transcribe.mjs"; }); }
+window.addEventListener("resize", fitCanvas);
+
+// ---------- preview loop ----------
+function tick(){
+  const tMs = (playing ? audio.currentTime : (audio.currentTime||0))*1000;
+  const cwi = currentWordIndex(tMs);
+  const pi = cwi<0 ? 0 : wordPage[cwi];
+  drawFrame(words.length?pi:-1, tMs);
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+// ---------- audio loading ----------
+$("file").onchange = () => {
+  const f = $("file").files[0]; if(!f) return;
+  audio.src = URL.createObjectURL(f);
+  $("btnTranscribe").disabled = false;
+  setStatus(`loaded: ${f.name}`);
+};
+
+// resample any audio file to 16k mono Float32 for whisper
+async function decodeTo16k(file){
+  const buf = await file.arrayBuffer();
+  const ac = new (window.AudioContext||window.webkitAudioContext)();
+  const decoded = await ac.decodeAudioData(buf);
+  const off = new OfflineAudioContext(1, Math.ceil(decoded.duration*16000), 16000);
+  const src = off.createBufferSource(); src.buffer = decoded; src.connect(off.destination); src.start();
+  const rendered = await off.startRendering();
+  ac.close();
+  return rendered.getChannelData(0);
+}
+
+// ---------- transcription ----------
+let transcriber = null, loadedModel = null;
+$("btnTranscribe").onclick = async () => {
+  const f = $("file").files[0]; if(!f) return;
+  $("btnTranscribe").disabled = true; $("btnExport").disabled = true;
+  $("prog").style.display="block"; $("prog").removeAttribute("value");
+  try{
+    const model = $("model").value;
+    if(transcriber===null || loadedModel!==model){
+      setStatus(`loading ${model} ...`);
+      transcriber = await pipeline("automatic-speech-recognition", model, {
+        device: navigator.gpu ? "webgpu" : "wasm",
+        progress_callback: (p) => {
+          if(p.status==="progress" && p.total) setStatus(`downloading model ${p.file||""} ${(p.progress||0).toFixed(0)}%`);
+        },
+      });
+      loadedModel = model;
+    }
+    setStatus("decoding audio ...");
+    const data = await decodeTo16k(f);
+    setStatus("transcribing ... (this runs locally and can take a bit)");
+    const out = await transcriber(data, { return_timestamps:"word", chunk_length_s:30, stride_length_s:5 });
+    words = normalizeChunks(out.chunks || []);
+    buildPages();
+    $("badge").textContent = `${words.length} words · ${pages.length} frames`;
+    $("btnExport").disabled = words.length===0;
+    $("btnPlay").disabled = false;
+    $("prog").style.display="none";
+    setStatus(`done — ${words.length} words. press play to preview.`);
+  }catch(e){
+    $("prog").style.display="none";
+    setStatus("error: " + (e?.message || e));
+    console.error(e);
+  }
+  $("btnTranscribe").disabled = false;
+};
+
+// whisper word chunks -> {text,startMs,endMs}, filling any null timestamps
+function normalizeChunks(chunks){
+  const out=[]; let last=0;
+  for(const c of chunks){
+    const t = c.timestamp || [];
+    let s = (t[0]==null) ? last : t[0];
+    let e = (t[1]==null) ? s : t[1];
+    if(e<s) e=s;
+    out.push({ text:c.text, startMs:Math.round(s*1000), endMs:Math.round(e*1000) });
+    last = e;
+  }
+  return out;
+}
+
+// ---------- preview play ----------
+$("btnPlay").onclick = async () => {
+  if(playing){ audio.pause(); playing=false; $("btnPlay").textContent="▶ play"; }
+  else { await audio.play(); playing=true; $("btnPlay").textContent="⏸ pause"; }
+};
+audio.addEventListener("ended", ()=>{ playing=false; $("btnPlay").textContent="▶ play"; });
+
+document.querySelectorAll('input[name=aspect]').forEach(r => r.onchange = () => { fitCanvas(); });
+
+// ---------- export (real-time MediaRecorder) ----------
+let audioGraph = null; // created once (createMediaElementSource is one-shot per element)
+function ensureAudioGraph(){
+  if(audioGraph) return audioGraph;
+  const ac = new (window.AudioContext||window.webkitAudioContext)();
+  const srcNode = ac.createMediaElementSource(audio);
+  const dest = ac.createMediaStreamDestination();
+  srcNode.connect(dest); srcNode.connect(ac.destination); // keep audible
+  audioGraph = { ac, dest };
+  return audioGraph;
+}
+function pickMime(){
+  const cands = ["video/mp4;codecs=avc1.42E01E,mp4a.40.2","video/mp4","video/webm;codecs=vp9,opus","video/webm"];
+  for(const m of cands) if(window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m;
+  return "";
+}
+$("btnExport").onclick = async () => {
+  if(!words.length) return;
+  $("btnExport").disabled = true; $("btnTranscribe").disabled = true; $("dl").style.display="none";
+  try{
+    const { ac, dest } = ensureAudioGraph();
+    if(ac.state==="suspended") await ac.resume();
+    const stream = cv.captureStream(30);
+    for(const tr of dest.stream.getAudioTracks()) stream.addTrack(tr);
+    const mime = pickMime();
+    const rec = new MediaRecorder(stream, mime ? { mimeType:mime, videoBitsPerSecond: 8_000_000 } : undefined);
+    const blobs=[]; rec.ondataavailable = e => { if(e.data.size) blobs.push(e.data); };
+    const stopped = new Promise(r => rec.onstop = r);
+    audio.currentTime = 0;
+    rec.start();
+    playing = true; $("btnPlay").textContent="⏸ pause";
+    await audio.play();
+    const total = audio.duration || 0;
+    const onEnd = () => rec.stop();
+    audio.addEventListener("ended", onEnd, { once:true });
+    const iv = setInterval(()=>{ if(total) setStatus(`recording ${audio.currentTime.toFixed(0)}/${total.toFixed(0)}s — keep tab focused`); }, 500);
+    await stopped;
+    clearInterval(iv);
+    playing=false; $("btnPlay").textContent="▶ play";
+    const ext = mime.includes("mp4") ? "mp4" : "webm";
+    const blob = new Blob(blobs, { type: mime || "video/webm" });
+    const a = $("dl");
+    a.href = URL.createObjectURL(blob);
+    a.download = `brat-${aspect()}.${ext}`;
+    a.textContent = `⬇ download brat-${aspect()}.${ext} (${(blob.size/1e6).toFixed(1)} MB)`;
+    a.style.display = "inline-block";
+    setStatus(ext==="mp4" ? "done — mp4 ready." : "done — your browser recorded webm (works on youtube; for tiktok convert to mp4).");
+  }catch(e){
+    setStatus("export error: " + (e?.message||e));
+    console.error(e);
+  }
+  $("btnExport").disabled = false; $("btnTranscribe").disabled = false;
+};
+
+// ---------- boot ----------
+(async () => {
+  try{ await document.fonts.load('132px "ArialNarrow"'); await document.fonts.ready; }catch{}
+  fitCanvas();
+  drawFrame(-1, 0);
+  window.__bratReady = true;
+})();
 </script>
 </body>
 </html>

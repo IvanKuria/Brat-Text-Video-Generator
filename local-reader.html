@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>brat — transcript</title>
+<style>
+  @font-face{
+    font-family:"ArialNarrow";
+    src:url("./fonts/ArialNarrowRegular.ttf") format("truetype");
+    font-weight:400; font-style:normal; font-display:block;
+  }
+  :root{
+    --bg:#ffffff;          /* brat white */
+    --ink:#000000;         /* spoken */
+    --ghost:#bdbdbd;       /* unspoken */
+  }
+  html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  /* #stage dimensions are set from the ?aspect= dims map in JS (default 9x16). */
+  #stage{position:absolute;top:50%;left:50%;width:1080px;height:1920px;transform:translate(-50%,-50%);}
+  #page{
+    position:absolute; left:60px; right:60px; top:50%; transform:translateY(-50%) scaleX(1.08);
+    font-family:"ArialNarrow",Arial,sans-serif; font-weight:400;
+    text-transform:lowercase;
+    font-size:132px; line-height:1.04; letter-spacing:0;
+    color:var(--ghost);
+    filter:blur(2px);
+    transition:opacity .28s ease, transform .28s ease;
+  }
+  #page.swap{opacity:0; transform:translateY(-50%) scaleX(1.08) translateY(14px);}
+  /* each line is a flex row spread edge-to-edge (brat justified look) */
+  .line{display:flex; justify-content:space-between; align-items:baseline; white-space:nowrap;}
+  .line.one{justify-content:center;}
+  .w{color:var(--ghost); transition:color .18s ease;}
+  .w.on{color:var(--ink);}
+  .capture #page, .capture .w{transition:none !important;}
+  .capture #hint{display:none !important;}
+  #hint{
+    position:absolute; bottom:54px; left:50%; transform:translateX(-50%);
+    font-family:"ArialNarrow",Arial,sans-serif; font-weight:400; text-transform:lowercase;
+    font-size:30px; color:#bdbdbd;
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="page"></div>
+  <div id="hint">press space to play</div>
+</div>
+<audio id="audio" src="./narration.m4a" preload="auto"></audio>
+
+<script>
+const audio = document.getElementById("audio");
+const pageEl = document.getElementById("page");
+const hint = document.getElementById("hint");
+const stage = document.getElementById("stage");
+
+// ---- aspect / canvas config ----
+const SCALEX = 1.08; // horizontal stretch baked into #page (must match CSS transform)
+const MINGAP_FRAC = 0.10; // minimum inter-word gap as a fraction of font-size (for fit check)
+const MAX_WORDS_PER_LINE = 3;
+const MAX_LINES_PER_FRAME = 4;
+const DIMS = {
+  "9x16": { w: 1080, h: 1920, font: 132, pad: 60 },
+  "16x9": { w: 1920, h: 1080, font: 150, pad: 120 },
+};
+function readAspect(){
+  let a = new URLSearchParams(location.search).get("aspect") || "9x16";
+  a = a.replace(":", "x").trim();
+  return DIMS[a] ? a : "9x16";
+}
+const ASPECT = readAspect();
+const D = DIMS[ASPECT];
+// apply canvas dimensions
+stage.style.width = D.w + "px";
+stage.style.height = D.h + "px";
+pageEl.style.left = D.pad + "px";
+pageEl.style.right = D.pad + "px";
+pageEl.style.fontSize = D.font + "px";
+
+let words = [];      // {text, startMs, endMs}
+let pages = [];      // each frame = array of lines; each line = array of word indices
+let wordPage = [];   // word index -> frame index
+let activePage = -1;
+let spans = [];      // current frame's word spans (in reading order)
+let playing = false;
+let pausedMs = 0;    // clock when not playing (decouples preview from audio seeking)
+
+// ?capture=1 → deterministic offline frame rendering (no transitions, instant page swaps).
+const captureMode = new URLSearchParams(location.search).has("capture");
+if(captureMode){ document.documentElement.classList.add("capture"); if(document.body) document.body.classList.add("capture"); }
+
+function timeMsNow(){ return playing ? audio.currentTime*1000 : pausedMs; }
+
+function fit(){ const s=Math.min(innerWidth/D.w, innerHeight/D.h); stage.style.transform=`translate(-50%,-50%) scale(${s})`; }
+addEventListener("resize", fit); fit();
+
+function mergeWords(tokens){
+  const out=[];
+  for(const t of tokens){
+    if(out.length===0 || /^\s/.test(t.text)){ out.push({text:t.text, startMs:t.startMs, endMs:t.endMs}); }
+    else { const w=out[out.length-1]; w.text+=t.text; w.endMs=t.endMs; }
+  }
+  return out;
+}
+
+// Chunk words into frames of lines: <=3 words/line, <=4 lines/frame (12 words max).
+// Prefer ending a frame at sentence punctuation once it already has >=2 lines, so
+// frames don't straddle long pauses awkwardly — but never exceed the hard caps.
+function buildPages(){
+  pages=[];
+  let frameLines=[], curLine=[];
+  const flushLine=()=>{ if(curLine.length){ frameLines.push(curLine); curLine=[]; } };
+  const flushFrame=()=>{ flushLine(); if(frameLines.length){ pages.push(frameLines); frameLines=[]; } };
+  for(let i=0;i<words.length;i++){
+    curLine.push(i);
+    const ends=/[.?!]["”']?$/.test(words[i].text.trim());
+    if(curLine.length>=MAX_WORDS_PER_LINE) flushLine();
+    if(frameLines.length>=MAX_LINES_PER_FRAME) flushFrame();
+    else if(ends && (frameLines.length>=2 || (frameLines.length>=1 && curLine.length===0))) flushFrame();
+  }
+  flushFrame();
+  wordPage=new Array(words.length);
+  pages.forEach((fr,pi)=>fr.forEach(line=>line.forEach(wi=>wordPage[wi]=pi)));
+}
+
+// Shrink the current frame's font so the widest line fits the available width.
+// (Mirrors how bratgenerator scales text to fill/fit. scaleX is accounted for.)
+function fitFrame(){
+  pageEl.style.fontSize = D.font + "px";
+  const avail = pageEl.clientWidth / SCALEX;
+  let scale = 1;
+  for(const line of pageEl.querySelectorAll(".line")){
+    const kids = line.children;
+    if(!kids.length) continue;
+    let sum=0; for(const s of kids) sum+=s.offsetWidth;
+    const need = sum + (kids.length-1)*D.font*MINGAP_FRAC;
+    if(need>avail) scale=Math.min(scale, avail/need);
+  }
+  if(scale<1) pageEl.style.fontSize = (D.font*scale) + "px";
+}
+
+function buildFrag(pi){
+  spans=[];
+  const frag=document.createDocumentFragment();
+  for(const line of pages[pi]){
+    const ld=document.createElement("div");
+    ld.className = "line" + (line.length===1 ? " one" : "");
+    for(const wi of line){
+      const s=document.createElement("span");
+      s.className="w"; s.textContent=words[wi].text.trim();
+      s.dataset.wi=wi;
+      ld.appendChild(s); spans.push(s);
+    }
+    frag.appendChild(ld);
+  }
+  return frag;
+}
+
+function renderPage(pi){
+  const frag=buildFrag(pi);
+  if(captureMode){
+    // instant, synchronous swap for frame-accurate capture
+    pageEl.innerHTML=""; pageEl.appendChild(frag); fitFrame();
+  } else {
+    // swap animation
+    pageEl.classList.add("swap");
+    setTimeout(()=>{
+      pageEl.innerHTML=""; pageEl.appendChild(frag); fitFrame(); pageEl.classList.remove("swap");
+    }, 140);
+  }
+}
+
+function currentWordIndex(tMs){
+  let idx=-1;
+  for(let i=0;i<words.length;i++){ if(words[i].startMs<=tMs) idx=i; else break; }
+  return idx;
+}
+
+function frame(){
+  if(words.length){
+    const tMs=timeMsNow();
+    const cwi=currentWordIndex(tMs);
+    const pi = cwi<0 ? 0 : wordPage[cwi];
+    if(pi!==activePage){ activePage=pi; renderPage(pi); }
+    // update colors (after potential swap settle, spans reflect activePage)
+    for(const s of spans){ const wi=+s.dataset.wi; s.classList.toggle("on", words[wi].startMs<=tMs); }
+  }
+  requestAnimationFrame(frame);
+}
+
+function play(){ audio.currentTime=pausedMs/1000; audio.play(); playing=true; hint.style.display="none"; }
+function pause(){ pausedMs=audio.currentTime*1000; audio.pause(); playing=false; hint.style.display=""; }
+function seekToPage(pi){ pi=Math.max(0,Math.min(pages.length-1,pi)); pausedMs=words[pages[pi][0][0]].startMs; if(playing) audio.currentTime=pausedMs/1000; }
+
+addEventListener("keydown",(e)=>{
+  if(e.key===" "){ e.preventDefault(); playing?pause():play(); }
+  else if(e.key==="ArrowRight"){ if(playing)pause(); seekToPage((activePage<0?0:activePage)+1); }
+  else if(e.key==="ArrowLeft"){ if(playing)pause(); seekToPage((activePage<0?0:activePage)-1); }
+  else if(e.key.toLowerCase()==="r"){ pause(); pausedMs=0; audio.currentTime=0; }
+});
+
+function start(data){
+  words=mergeWords(data); buildPages();
+  // capture API: list of visual-change times (ms) + a synchronous seek used by record.mjs
+  window.__frames = [0, ...words.map(w=>w.startMs)];
+  window.__seek = (ms)=>{
+    pausedMs = ms;
+    const cwi = currentWordIndex(ms);
+    const pi = cwi<0 ? 0 : wordPage[cwi];
+    if(pi!==activePage || !spans.length){ activePage=pi; renderPage(pi); }
+    for(const s of spans){ const wi=+s.dataset.wi; s.classList.toggle("on", words[wi].startMs<=ms); }
+  };
+  // deep-link ?t=seconds (for previews/screenshots) drives the clock directly
+  const t=parseFloat(new URLSearchParams(location.search).get("t"));
+  if(!isNaN(t)){ pausedMs=t*1000; const sync=()=>{audio.currentTime=t;}; if(audio.readyState>=1) sync(); else audio.addEventListener("loadedmetadata", sync, {once:true}); }
+  requestAnimationFrame(frame);
+}
+// Use inlined captions if present (standalone build), else fetch the file (dev/server).
+if(window.CAPTIONS){ start(window.CAPTIONS); }
+else { fetch("./captions.json").then(r=>r.json()).then(start).catch(()=>{ pageEl.style.color="#1a1712"; pageEl.textContent="captions.json not found — run transcribe.mjs"; }); }
+</script>
+</body>
+</html>

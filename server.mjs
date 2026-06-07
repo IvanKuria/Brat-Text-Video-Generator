@@ -80,7 +80,7 @@ const server = http.createServer((req, res) => {
 
   if (req.method === "GET") {
     if (p === "/") return serveFile(res, path.join(__dirname, "app.html"));
-    if (p === "/reader") return serveFile(res, path.join(__dirname, "index.html"));
+    if (p === "/reader") return serveFile(res, path.join(__dirname, "local-reader.html"));
     if (p === "/download") return serveFile(res, OUT, { download: true });
     // static (within this dir only)
     const file = path.normalize(path.join(__dirname, decodeURIComponent(p)));
