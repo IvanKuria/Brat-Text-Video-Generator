@@ -15,6 +15,9 @@ There are two ways to run it:
 - **Transcription**: Whisper compiled to WebAssembly via [`transformers.js`](https://github.com/huggingface/transformers.js)
   (`tiny.en` / `base.en` / `small.en`), running on WebGPU when available. The model downloads
   once on first use.
+- **Edit**: the full transcript is shown in an editable box — fix any misheard words and hit
+  *apply*. Edits are diffed against the original so unchanged words keep their exact timestamps
+  (inserted words are interpolated), so the video stays in sync.
 - **Render**: the brat karaoke is drawn on a `<canvas>` (chunked to ≤3 words/line, ≤4 lines/frame,
   justified, auto-fit, light blur), revealing each word as it's spoken.
 - **Export**: real-time `MediaRecorder` capture of canvas + audio → MP4 (falls back to WebM on

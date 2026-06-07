@@ -20,6 +20,7 @@
   label.r{ display:inline-flex; align-items:center; gap:6px; margin-right:14px; font-size:18px; cursor:pointer; }
   input[type=file]{ font-size:14px; max-width:100%; }
   select{ font-family:inherit; font-size:16px; padding:4px; }
+  textarea#transcript{ width:100%; font-family:"ArialNarrowUI",Arial,sans-serif; font-size:16px; line-height:1.45; padding:8px; border:1px solid var(--line); resize:vertical; }
   button{ font-family:inherit; font-size:18px; text-transform:lowercase; background:#000; color:#fff; border:0; padding:9px 16px; cursor:pointer; }
   button:disabled{ background:#c4c4c4; cursor:default; }
   button.ghost{ background:#fff; color:#000; border:2px solid #000; }
@@ -57,6 +58,15 @@
       </div>
       <progress id="prog" value="0" max="1" style="display:none"></progress>
       <div id="status"></div>
+    </div>
+
+    <div class="step" id="editStep" style="display:none">
+      <h2>edit transcript <span style="color:var(--muted);font-size:14px">(optional)</span></h2>
+      <textarea id="transcript" rows="7" spellcheck="true"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button id="btnApply" class="ghost">apply edits</button>
+      </div>
+      <p class="hint">fix any misheard words, then apply — timing stays synced to the audio.</p>
     </div>
 
     <div class="step">
@@ -255,11 +265,13 @@ $("btnTranscribe").onclick = async () => {
     const out = await transcriber(data, { return_timestamps:"word", chunk_length_s:30, stride_length_s:5 });
     words = normalizeChunks(out.chunks || []);
     buildPages();
+    fillTranscript();
+    $("editStep").style.display = "block";
     $("badge").textContent = `${words.length} words · ${pages.length} frames`;
     $("btnExport").disabled = words.length===0;
     $("btnPlay").disabled = false;
     $("prog").style.display="none";
-    setStatus(`done — ${words.length} words. press play to preview.`);
+    setStatus(`done — ${words.length} words. edit the transcript if needed, then preview.`);
   }catch(e){
     $("prog").style.display="none";
     setStatus("error: " + (e?.message || e));
@@ -281,6 +293,54 @@ function normalizeChunks(chunks){
   }
   return out;
 }
+
+// ---------- editable transcript ----------
+function fillTranscript(){
+  $("transcript").value = words.map(w => w.text.trim()).join(" ");
+}
+const normTok = (s) => s.trim().toLowerCase().replace(/[^a-z0-9']/g, "");
+
+// Re-map timestamps from the old words onto the user's edited token list.
+// Unchanged words keep their exact times (LCS match); inserted words are
+// interpolated by index between the nearest matched neighbours.
+function realign(oldWords, newTexts){
+  const a = oldWords.map(w => normTok(w.text));
+  const b = newTexts.map(normTok);
+  const n = a.length, m = b.length;
+  const dp = Array.from({length:n+1}, () => new Int32Array(m+1));
+  for(let i=n-1;i>=0;i--) for(let j=m-1;j>=0;j--)
+    dp[i][j] = a[i]===b[j] ? dp[i+1][j+1]+1 : Math.max(dp[i+1][j], dp[i][j+1]);
+  const starts = new Array(m).fill(null);
+  let i=0, j=0;
+  while(i<n && j<m){
+    if(a[i]===b[j]){ starts[j]=oldWords[i].startMs; i++; j++; }
+    else if(dp[i+1][j] >= dp[i][j+1]) i++;
+    else j++;
+  }
+  const known = []; starts.forEach((s,k)=>{ if(s!=null) known.push(k); });
+  const interp = (k) => {
+    let lo=null, hi=null;
+    for(const kk of known){ if(kk<=k) lo=kk; if(kk>=k){ hi=kk; break; } }
+    if(lo!=null && hi!=null && lo!==hi) return starts[lo] + (starts[hi]-starts[lo])*((k-lo)/(hi-lo));
+    if(lo!=null) return starts[lo];
+    if(hi!=null) return starts[hi];
+    return 0;
+  };
+  const out = newTexts.map((t,k) => {
+    const s = Math.round(starts[k]!=null ? starts[k] : interp(k));
+    return { text:t, startMs:s, endMs:s };
+  });
+  let last=0; for(const w of out){ if(w.startMs<last) w.startMs=last; w.endMs=Math.max(w.startMs,w.endMs); last=w.startMs; }
+  return out;
+}
+$("btnApply").onclick = () => {
+  const toks = $("transcript").value.split(/\s+/).filter(Boolean);
+  if(!toks.length){ setStatus("transcript is empty."); return; }
+  words = realign(words, toks);
+  buildPages();
+  $("badge").textContent = `${words.length} words · ${pages.length} frames`;
+  setStatus(`transcript updated — ${words.length} words. preview to check.`);
+};
 
 // ---------- preview play ----------
 $("btnPlay").onclick = async () => {
